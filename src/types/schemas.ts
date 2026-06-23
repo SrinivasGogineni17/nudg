@@ -1,8 +1,5 @@
 import { z } from 'zod';
 
-const GOOGLE_REVIEW_URL_PATTERN =
-  /^https?:\/\/(www\.)?(google\.com\/maps|maps\.app\.goo\.gl)\/.+/;
-
 export const signUpSchema = z.object({
   firstName: z.string().min(1).max(50),
   lastName: z.string().min(1).max(50),
@@ -18,8 +15,8 @@ export const signUpSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
   googleReviewUrl: z
     .string()
-    .url()
-    .regex(GOOGLE_REVIEW_URL_PATTERN, 'Must be a valid Google Maps review link'),
+    .url('Please enter a valid URL')
+    .min(1, 'Google review link is required'),
 });
 
 export const sendRequestSchema = z.object({

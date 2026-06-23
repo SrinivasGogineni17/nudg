@@ -125,11 +125,21 @@ export default function SendRequestScreen() {
       setIsSending(false);
 
       if (result.success) {
-        // Check for duplicate warning — show dialog before confirming
+        // Check for duplicate warning — show dialog with the specific date
         if (result.data.duplicateWarning && !force) {
+          const previousDate = result.data.previousRequestDate
+            ? new Date(result.data.previousRequestDate).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+              })
+            : 'recently';
+
           Alert.alert(
-            'Duplicate Request',
-            'A review request was already sent to this number in the last 24 hours. Send another?',
+            'Previous Request Found',
+            `You've already requested feedback from this customer on ${previousDate}.\n\nAre you sure you want to send another request?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {

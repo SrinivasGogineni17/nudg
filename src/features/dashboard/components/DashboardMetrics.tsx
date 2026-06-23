@@ -22,7 +22,7 @@ export function DashboardMetrics({ metrics }: DashboardMetricsProps) {
     monthOverMonthChange,
     positiveResponses,
     needsAttention,
-    requestsSent,
+    responseRate,
   } = metrics;
 
   // Format month-over-month display
@@ -98,16 +98,16 @@ export function DashboardMetrics({ metrics }: DashboardMetricsProps) {
           </Text>
         </View>
 
-        {/* Requests Sent */}
+        {/* Response Rate */}
         <View className="flex-1 bg-white rounded-2xl p-4 border border-light-gray">
           <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mb-2">
-            <Ionicons name="paper-plane" size={16} color="#3B82F6" />
+            <Ionicons name="pulse" size={16} color="#3B82F6" />
           </View>
           <Text className="text-[22px] font-bold text-navy">
-            {requestsSent}
+            {responseRate === null ? '\u2014' : `${responseRate}%`}
           </Text>
           <Text className="text-caption text-navy/50 mt-0.5">
-            Requests{'\n'}Sent
+            Response{'\n'}Rate
           </Text>
         </View>
       </View>

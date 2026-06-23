@@ -64,6 +64,8 @@ export interface SmsDeliveryResult {
   reviewRequestId: string;
   status: 'sent' | 'queued';
   duplicateWarning?: boolean;
+  /** ISO date string of the previous request to this number (when duplicateWarning is true). */
+  previousRequestDate?: string;
 }
 
 // ─── Feedback DTOs ───────────────────────────────────────────────────────────

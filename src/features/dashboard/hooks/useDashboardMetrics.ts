@@ -37,6 +37,7 @@ export function useDashboardMetrics() {
           positiveResponses: 0,
           needsAttention: 0,
           requestsSent: 0,
+          responseRate: null,
         };
       }
 
@@ -69,12 +70,19 @@ export function useDashboardMetrics() {
       const positiveResponses = currentMonthFeedback.filter((f) => f.rating >= 4).length;
       const needsAttention = currentMonthFeedback.filter((f) => f.rating <= 3).length;
 
+      // Calculate response rate: (total responses / total requests sent) * 100
+      const totalResponses = currentMonthFeedback.length;
+      const responseRate = currentCount > 0
+        ? Math.round((totalResponses / currentCount) * 100)
+        : null;
+
       return {
         reviewOpportunities: currentCount,
         monthOverMonthChange,
         positiveResponses,
         needsAttention,
         requestsSent: currentCount,
+        responseRate,
       };
     },
     enabled: !!businessId,

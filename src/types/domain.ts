@@ -89,6 +89,7 @@ export interface DashboardMetrics {
   positiveResponses: number;
   needsAttention: number;
   requestsSent: number;
+  responseRate: number | null; // null = no requests sent yet
 }
 
 /** A single item in the Recent Activity Feed. */

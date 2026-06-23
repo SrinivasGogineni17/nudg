@@ -348,9 +348,31 @@ class MockFeedbackRepository implements IFeedbackRepository {
 // ─── Mock SMS Service ────────────────────────────────────────────────────────
 
 class MockSmsService implements ISmsService {
-  async sendFeedbackRequest(_params: SendSmsParams): Promise<Result<SmsDeliveryResult>> {
+  private _sentNumbers = new Map<string, string>(); // phone → ISO date
+
+  async sendFeedbackRequest(params: SendSmsParams): Promise<Result<SmsDeliveryResult>> {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const normalizedPhone = params.phoneNumber.replace(/\D/g, '');
+
+    // Check if we've already sent to this number (simulate duplicate detection)
+    const previousDate = this._sentNumbers.get(normalizedPhone);
+    if (previousDate) {
+      return {
+        success: true,
+        data: {
+          reviewRequestId: `rr-${Date.now()}`,
+          status: 'sent',
+          duplicateWarning: true,
+          previousRequestDate: previousDate,
+        },
+      };
+    }
+
+    // Record this send
+    this._sentNumbers.set(normalizedPhone, new Date().toISOString());
+
     return {
       success: true,
       data: {

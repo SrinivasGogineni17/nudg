@@ -24,14 +24,14 @@ export default function VerifyEmailScreen() {
         email before logging in.
       </Text>
 
-      {/* Back to Login Button */}
+      {/* Continue to Onboarding Button */}
       <Pressable
-        onPress={() => router.replace("/(auth)/login")}
+        onPress={() => router.replace("/(auth)/onboarding")}
         className="bg-rocket-orange rounded-lg py-4 px-8 items-center"
         accessibilityRole="button"
-        accessibilityLabel="Back to Login"
+        accessibilityLabel="Continue"
       >
-        <Text className="text-body font-bold text-white">Back to Login</Text>
+        <Text className="text-body font-bold text-white">Continue</Text>
       </Pressable>
     </View>
   );

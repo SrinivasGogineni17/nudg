@@ -184,8 +184,7 @@ export default function SignupScreen() {
           error={errors.googleReviewUrl?.message}
           control={control}
           name="googleReviewUrl"
-          placeholder="https://google.com/maps/place/..."
-          keyboardType="url"
+          placeholder="Paste your Google review link here"
           autoCapitalize="none"
         />
 

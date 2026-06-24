@@ -195,15 +195,26 @@ export default function OnboardingScreen() {
                 </Text>
               </View>
 
-              {plan.recommended && (
+              {plan.recommended ? (
                 <Pressable
                   onPress={() => handleSelectPlan(plan.tier)}
                   className="bg-rocket-orange rounded-xl py-3 items-center active:opacity-80"
                   accessibilityRole="button"
-                  accessibilityLabel="Start Free Trial"
+                  accessibilityLabel={`Start Free Trial with ${plan.name}`}
                 >
                   <Text className="text-caption font-bold text-white">
                     Start Free Trial
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => handleSelectPlan(plan.tier)}
+                  className="border border-light-gray rounded-xl py-3 items-center active:opacity-80"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${plan.name} plan`}
+                >
+                  <Text className="text-caption font-bold text-navy">
+                    Select {plan.name}
                   </Text>
                 </Pressable>
               )}

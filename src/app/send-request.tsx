@@ -152,13 +152,18 @@ export default function SendRequestScreen() {
           return;
         }
 
-        // Show success confirmation
+        // Show success confirmation, then navigate back to dashboard
         setSuccessState({
           phoneNumber: formatPhoneNumber(data.phoneNumber),
           customerName: data.customerName || undefined,
           serviceType: data.serviceType || undefined,
         });
         reset();
+
+        // Navigate back to home after a short delay to show confirmation
+        setTimeout(() => {
+          router.replace('/(tabs)');
+        }, 2500);
       } else {
         const error = result.error as AppError;
 

@@ -100,7 +100,37 @@ function createRealServiceRegistry(): ServiceRegistry {
     reviewRequests: new repos.ReviewRequest(),
     feedback: new repos.FeedbackRecord(),
     businessProfile: new repos.BusinessProfile(),
-    sms: null as unknown as ServiceRegistry["sms"], // Edge Function adapter — not yet built
+    sms: {
+      async sendFeedbackRequest(params: any) {
+        const { data: { session } } = await require('@/infrastructure/supabase/client').supabase.auth.getSession();
+        if (!session?.access_token) {
+          return { success: false, error: { code: 'AUTH_ERROR', message: 'Not authenticated' } };
+        }
+        try {
+          const response = await fetch(
+            'https://lbecvdpvxjllrzrxscly.supabase.co/functions/v1/send-sms',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify(params),
+            }
+          );
+          const data = await response.json();
+          if (!response.ok) {
+            return { success: false, error: data.error || { code: 'SERVER_ERROR', message: 'SMS send failed' } };
+          }
+          if (data.duplicateWarning && !data.reviewRequestId) {
+            return { success: true, data: { reviewRequestId: '', status: 'sent' as const, duplicateWarning: true, previousRequestDate: data.previousRequestDate } };
+          }
+          return { success: true, data: { reviewRequestId: data.reviewRequestId, status: data.status, duplicateWarning: data.duplicateWarning, previousRequestDate: data.previousRequestDate } };
+        } catch (err: any) {
+          return { success: false, error: { code: 'NETWORK_ERROR', message: err.message || 'Network error sending SMS' } };
+        }
+      },
+    } as ServiceRegistry["sms"],
     notifications: new repos.Notification(),
     monitoring: realMonitoringService,
     analytics: realAnalyticsService,

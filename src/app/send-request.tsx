@@ -391,6 +391,13 @@ export default function SendRequestScreen() {
           </Text>
         </View>
 
+        {/* SMS Consent Acknowledgment */}
+        <Text className="text-xs text-navy/50 mb-4 px-1 leading-4">
+          By sending this request, you confirm you have consent from the
+          recipient to receive this message. Recipient can reply STOP to opt
+          out. Message & data rates may apply.{' '}
+        </Text>
+
         {/* Send Button */}
         <Pressable
           onPress={handleSubmit(onSubmit)}

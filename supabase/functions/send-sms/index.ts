@@ -57,7 +57,7 @@ export function formatSmsMessage(
   customerName?: string,
 ): string {
   const greeting = customerName ? `Hi ${customerName}, ` : "";
-  return `${greeting}Thank you for choosing ${businessName}. Small businesses like ours rely on customer feedback to grow and improve. On a scale of 1-5, how would you rate your experience today? Reply with a number from 1 to 5.`;
+  return `${greeting}Thank you for choosing ${businessName}. Small businesses like ours rely on customer feedback to grow and improve. On a scale of 1-5, how would you rate your experience today? Reply with a number from 1 to 5.\n\nReply STOP to opt out.`;
 }
 
 serve(async (req: Request): Promise<Response> => {

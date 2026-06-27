@@ -1,0 +1,231 @@
+###############################################################################
+# Nudg — Production iOS Deployment Pipeline
+#
+# Deterministic deployment triggered strictly by semantic version tags (v*.*.*).
+# Native iOS binaries are immutable once downloaded — this pipeline ensures
+# every release is validated, built, and deployed atomically.
+#
+# Architecture:
+#   Git Tag (v1.x.x) → Validate → Build (EAS) → Submit (TestFlight)
+#                                              → Deploy (Supabase Migrations + Functions)
+#
+# Concurrency: Only ONE production deployment can execute at a time.
+# If a second tag is pushed while a build is running, it queues (no cancellation).
+###############################################################################
+
+name: Production iOS Deployment
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags: v1.0.0, v1.2.3, etc.
+
+# Architectural concurrency gate — no parallel production builds
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20.20.2'
+  EAS_CLI_VERSION: '12.6.2'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 1: Validate — Security scan, type check, migration integrity
+  # ═══════════════════════════════════════════════════════════════════════════
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js (pinned)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 📦 Install dependencies (frozen lockfile)
+        run: npm ci --legacy-peer-deps
+
+      # ─── Security: Ensure no secrets in source ────────────────────────────
+      - name: 🔬 Secret leak scan
+        run: |
+          echo "Scanning for leaked credentials..."
+          LEAKED=0
+
+          # Check for .env files in git
+          if git ls-files | grep -E '^\.(env)$|^\.(env)\.' | grep -v '.env.example'; then
+            echo "❌ FATAL: .env file tracked in git!"
+            LEAKED=1
+          fi
+
+          # Check for hardcoded service role keys
+          if grep -r "SUPABASE_SERVICE_ROLE_KEY" src/ supabase/ --include="*.ts" --include="*.tsx" -l 2>/dev/null | grep -v "\.d\.ts"; then
+            echo "❌ FATAL: Service role key reference found in client/function code!"
+            LEAKED=1
+          fi
+
+          # Check for hardcoded tokens
+          if grep -rE "(eyJ[a-zA-Z0-9-_]+\.eyJ[a-zA-Z0-9-_]+\.)" src/ --include="*.ts" --include="*.tsx" -l 2>/dev/null; then
+            echo "❌ FATAL: Hardcoded JWT token detected in source!"
+            LEAKED=1
+          fi
+
+          if [ $LEAKED -eq 1 ]; then exit 1; fi
+          echo "✅ No leaked secrets detected."
+
+      # ─── Type safety ──────────────────────────────────────────────────────
+      - name: 🏗️ TypeScript type check
+        run: npx tsc --noEmit
+
+      # ─── Migration integrity ──────────────────────────────────────────────
+      - name: 🗄️ Validate migration timestamps
+        run: |
+          MIGRATION_DIR="supabase/migrations"
+          if [ -d "$MIGRATION_DIR" ]; then
+            TIMESTAMPS=$(ls "$MIGRATION_DIR"/*.sql 2>/dev/null | xargs -I{} basename {} | cut -c1-14 | sort)
+            DUPLICATES=$(echo "$TIMESTAMPS" | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ FATAL: Duplicate migration timestamps:"
+              echo "$DUPLICATES"
+              exit 1
+            fi
+            echo "✅ Migration timestamps are unique and sequential."
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 2: Build & Submit — EAS production build → TestFlight
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-and-submit:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production  # GitHub environment with required reviewers
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js (pinned)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 📦 Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: 🔑 Authenticate EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: ${{ env.EAS_CLI_VERSION }}
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📋 Log build metadata
+        run: |
+          echo "═══════════════════════════════════════════════"
+          echo "  Release Tag:    ${{ github.ref_name }}"
+          echo "  Commit SHA:     ${{ github.sha }}"
+          echo "  Node Version:   ${{ env.NODE_VERSION }}"
+          echo "  EAS CLI:        ${{ env.EAS_CLI_VERSION }}"
+          echo "═══════════════════════════════════════════════"
+
+      # ─── Build + auto-submit to TestFlight ────────────────────────────────
+      - name: 🚀 Build iOS production binary & submit to TestFlight
+        run: eas build --platform ios --profile production --non-interactive --auto-submit
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+      # ─── Notify team ──────────────────────────────────────────────────────
+      - name: ✅ Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ *Nudg ${{ github.ref_name }} submitted to TestFlight*\n\nCommit: `${{ github.sha }}`\nBinary is now processing in App Store Connect.\nPhased 7-day rollout will begin after approval."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: 🚨 Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🚨 *Nudg ${{ github.ref_name }} BUILD FAILED*\n\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n⚠️ Check EAS remote version state — may need `eas build:version:set` cleanup."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 3: Deploy Backend — Supabase migrations + edge functions
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy-backend:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Install Supabase CLI
+        run: npm install -g supabase@latest
+
+      - name: 🔑 Authenticate Supabase
+        run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: 🔗 Link production project
+        run: supabase link --project-ref ${{ secrets.PROD_SUPABASE_PROJECT_REF }}
+
+      # ─── Database migrations ──────────────────────────────────────────────
+      - name: 🗄️ Push database migrations
+        run: |
+          echo "Validating migration state against production..."
+          supabase migration list
+
+          echo "Applying pending migrations..."
+          supabase db push
+
+          echo "✅ Database migrations applied successfully."
+
+      # ─── Edge Functions ───────────────────────────────────────────────────
+      - name: ⚡ Deploy Edge Functions
+        run: |
+          echo "Deploying all Edge Functions to production..."
+          supabase functions deploy send-sms
+          supabase functions deploy twilio-webhook
+          supabase functions deploy appstore-webhook
+          supabase functions deploy sms-queue-retry
+          supabase functions deploy decrypt-data
+          supabase functions deploy delete-customer
+          echo "✅ All Edge Functions deployed."
+
+      # ─── Verify RLS ──────────────────────────────────────────────────────
+      - name: 🛡️ Verify Row Level Security
+        run: |
+          echo "Checking RLS status on all user-facing tables..."
+          supabase db execute --command "
+            SELECT tablename, rowsecurity
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            AND tablename IN ('business_owners', 'review_requests', 'feedback_records', 'device_tokens', 'sms_queue')
+            AND rowsecurity = false;
+          " | tee /tmp/rls_check.txt
+
+          if grep -q "false" /tmp/rls_check.txt 2>/dev/null; then
+            echo "❌ FATAL: Tables found with RLS disabled!"
+            cat /tmp/rls_check.txt
+            exit 1
+          fi
+          echo "✅ All user-facing tables have RLS enabled."
+
+      - name: ✅ Backend deployment complete
+        run: echo "Backend deployment for ${{ github.ref_name }} complete."

@@ -1,0 +1,84 @@
+###############################################################################
+# Nudg — PR Validation & Preview Builds
+#
+# Runs on PRs and develop pushes. Does NOT deploy to production.
+# Production deployments are handled by deploy-production.yml (tag-triggered).
+###############################################################################
+
+name: Validate & Preview
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true  # Cancel stale PR checks
+
+env:
+  NODE_VERSION: '20.20.2'
+  EAS_CLI_VERSION: '12.6.2'
+
+jobs:
+  # ─── Validation (all PRs) ──────────────────────────────────────────────────
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Safety: Ensure no .env files were accidentally committed
+      - name: Check for leaked secrets
+        run: |
+          if git ls-files | grep -E '^\.(env)$|^\.(env)\.' | grep -v '.env.example'; then
+            echo "❌ ERROR: .env file detected in git!"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Validate migration timestamps
+        run: |
+          MIGRATION_DIR="supabase/migrations"
+          if [ -d "$MIGRATION_DIR" ]; then
+            TIMESTAMPS=$(ls "$MIGRATION_DIR"/*.sql 2>/dev/null | xargs -I{} basename {} | cut -c1-14 | sort)
+            DUPLICATES=$(echo "$TIMESTAMPS" | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate migration timestamps: $DUPLICATES"
+              exit 1
+            fi
+            echo "✅ Migrations OK"
+          fi
+
+      - run: npm audit --audit-level=high || true
+
+  # ─── Preview Build (develop branch only) ───────────────────────────────────
+  build-preview:
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: ${{ env.EAS_CLI_VERSION }}
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci --legacy-peer-deps
+
+      - run: eas build --platform ios --profile preview --non-interactive

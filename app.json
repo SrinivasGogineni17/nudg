@@ -12,7 +12,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.nudg.app"
+      "bundleIdentifier": "com.nudg.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -41,7 +44,8 @@
           "icon": "./assets/icon.png",
           "color": "#0CBFA6"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ]
   }
 }

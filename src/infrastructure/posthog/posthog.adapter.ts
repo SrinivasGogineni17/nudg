@@ -8,6 +8,7 @@ import PostHog from 'posthog-react-native';
 import Constants from 'expo-constants';
 
 import type { IAnalyticsService, AnalyticsEvent } from '@/services/interfaces/analytics.service';
+import { sanitizeTelemetryPayload } from '@/infrastructure/monitoring/telemetry-sanitizer';
 
 /** PostHog client singleton — initialized via initPostHog(). */
 let posthogClient: PostHog | null = null;
@@ -87,21 +88,23 @@ export class PostHogAnalyticsAdapter implements IAnalyticsService {
    * Tracks a named event with optional properties.
    * Includes app version and build number in all events.
    *
-   * Supported events:
-   * - review_request_sent
-   * - feedback_received
-   * - customer_called
-   * - feedback_resolved
-   * - subscription_tier_changed
+   * Fix 4: All properties pass through the PII sanitizer before transmission.
+   * This prevents accidentally attached auth tokens, emails, or phone numbers
+   * from leaking to the analytics service.
    */
   trackEvent(event: AnalyticsEvent): void {
     if (!posthogClient) return;
 
-    posthogClient.capture(event.name, {
+    // Fix 4: Sanitize all properties before they leave the device
+    const rawProperties = {
       ...toSafeProperties(event.properties),
       ...getAppContext(),
       ...(event.timestamp ? { timestamp: new Date(event.timestamp).toISOString() } : {}),
-    });
+    };
+
+    const sanitizedProperties = sanitizeTelemetryPayload(rawProperties);
+
+    posthogClient.capture(event.name, sanitizedProperties);
   }
 
   /**

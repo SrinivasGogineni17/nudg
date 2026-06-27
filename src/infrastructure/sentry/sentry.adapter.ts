@@ -9,7 +9,6 @@
  */
 
 import * as Sentry from '@sentry/react-native';
-import type { ErrorEvent } from '@sentry/core';
 import Constants from 'expo-constants';
 
 import type {
@@ -17,71 +16,7 @@ import type {
   ErrorContext,
   Breadcrumb,
 } from '@/services/interfaces/monitoring.service';
-
-// ─── Sensitive Field Scrubbing ───────────────────────────────────────────────
-
-/** Fields that must never appear in error reports. */
-const SENSITIVE_FIELDS = ['customerPhone', 'customerName', 'feedbackText'];
-
-/**
- * Recursively removes sensitive fields from an object.
- * Returns a new object with sensitive keys replaced by '[Redacted]'.
- */
-function scrubSensitiveData(data: unknown): unknown {
-  if (data === null || data === undefined) return data;
-
-  if (Array.isArray(data)) {
-    return data.map(scrubSensitiveData);
-  }
-
-  if (typeof data === 'object') {
-    const scrubbed: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-      if (SENSITIVE_FIELDS.includes(key)) {
-        scrubbed[key] = '[Redacted]';
-      } else {
-        scrubbed[key] = scrubSensitiveData(value);
-      }
-    }
-    return scrubbed;
-  }
-
-  return data;
-}
-
-/**
- * Sentry beforeSend callback that strips sensitive customer data from all events.
- * Scrubs extras, contexts, and breadcrumb data fields.
- */
-function beforeSend(event: ErrorEvent): ErrorEvent | null {
-  // Scrub extra data
-  if (event.extra) {
-    event.extra = scrubSensitiveData(event.extra) as Record<string, unknown>;
-  }
-
-  // Scrub contexts
-  if (event.contexts) {
-    event.contexts = scrubSensitiveData(event.contexts) as Record<
-      string,
-      Record<string, unknown>
-    >;
-  }
-
-  // Scrub breadcrumb data
-  if (event.breadcrumbs) {
-    event.breadcrumbs = event.breadcrumbs.map((breadcrumb) => {
-      if (breadcrumb.data) {
-        return {
-          ...breadcrumb,
-          data: scrubSensitiveData(breadcrumb.data) as Record<string, unknown>,
-        };
-      }
-      return breadcrumb;
-    });
-  }
-
-  return event;
-}
+import { sentryBeforeSendConfig } from '@/infrastructure/monitoring/telemetry-sanitizer';
 
 // ─── Sentry Initialization ───────────────────────────────────────────────────
 
@@ -112,12 +47,18 @@ export function initSentry(): void {
 
   Sentry.init({
     dsn,
-    beforeSend,
+    beforeSend: sentryBeforeSendConfig,
     // Disable in development to avoid noise
     enabled: !__DEV__,
     // Include release/environment info
     release: `com.nudg.app@${appVersion}+${buildNumber}`,
     environment: __DEV__ ? 'development' : 'production',
+
+    // Fix 2: Offline Caching — buffers crash reports to disk when network is dead
+    // Sends all buffered events the moment connectivity is restored.
+    enableAutoSessionTracking: true,
+    maxCacheItems: 30,
+    sendDefaultPii: false,
   });
 
   // Set global tags so they appear on every report

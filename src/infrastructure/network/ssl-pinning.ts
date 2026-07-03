@@ -93,7 +93,7 @@ const PINNED_DOMAINS = {
 };
 
 export interface PinnedFetchOptions {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
   body?: string;
   timeoutInterval?: number;

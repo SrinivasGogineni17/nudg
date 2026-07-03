@@ -46,6 +46,13 @@
         }
       ],
       "@sentry/react-native"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3b13fa07-e1fb-49e9-bbf8-2e0f46931272"
+      }
+    },
+    "owner": "srinigogineni"
   }
 }

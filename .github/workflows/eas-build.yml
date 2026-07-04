@@ -19,7 +19,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20.20.2'
-  EAS_CLI_VERSION: '12.6.2'
+  EAS_CLI_VERSION: 'latest'
 
 jobs:
   # ─── Validation (all PRs) ──────────────────────────────────────────────────
